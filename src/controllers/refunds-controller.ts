@@ -1,23 +1,29 @@
+import { AppError } from '@/utils/AppError'
 import { Request, Response } from 'express'
 import { prisma } from '@/database/prisma'
-import { AppError } from '@/utils/AppError'
 import { z } from 'zod'
 
-const CategoriesEnum = z.enum([ 'food', 'others', 'services', 'accommodation', 'transport' ])
+const CategoriesEnum = z.enum([
+  'food',
+  'others',
+  'services',
+  'transport',
+  'accommodation',
+])
 
 class RefundsController {
-  async create (request: Request, response: Response) {
+  async create(request: Request, response: Response) {
     const bodySchema = z.object({
-      name: z.string().min(1, { message: 'informe o nome da solicitação' }),
+      name: z.string().min(1),
       category: CategoriesEnum,
-      amount: z.number().positive({ message: 'o valor precisa ser positivo' }),
+      amount: z.number().positive(),
       filename: z.string().min(20),
     })
 
     const { name, category, amount, filename } = bodySchema.parse(request.body)
 
-    if(!request.user?.id) {
-      throw new AppError('unauthorized', 401)
+    if (!request.user?.id) {
+      throw new AppError('Não autorizado', 401)
     }
 
     const refund = await prisma.refunds.create({
@@ -26,14 +32,14 @@ class RefundsController {
         category,
         amount,
         filename,
-        userId: request.user?.id
+        userId: request.user.id,
       },
     })
 
     response.status(201).json(refund)
   }
 
-  async index (request: Request, response: Response) {
+  async index(request: Request, response: Response) {
     const querySchema = z.object({
       name: z.string().optional().default(''),
       page: z.coerce.number().optional().default(1),
@@ -42,6 +48,7 @@ class RefundsController {
 
     const { name, page, perPage } = querySchema.parse(request.query)
 
+    // Calcular os valores de 'skip' e 'take'
     const skip = (page - 1) * perPage
 
     const refunds = await prisma.refunds.findMany({
@@ -58,27 +65,22 @@ class RefundsController {
       include: { user: true },
     })
 
-    const totalRecords = await prisma.refunds.count({
-      where: {
-        user: {
-          name: {
-            contains: name.trim(),
-          },
-        },
-      },
-    })
-
+    // Obter o total de registros para calcular o número de páginas
+    const totalRecords = await prisma.refunds.count()
     const totalPages = Math.ceil(totalRecords / perPage)
 
     response.json({
       refunds,
       pagination: {
-        page, perPage, totalRecords, totalPages: totalPages > 0 ? totalPages : 1,
-      }
+        page,
+        perPage,
+        totalRecords,
+        totalPages: totalPages > 0 ? totalPages : 1,
+      },
     })
   }
 
-  async show (request: Request, response: Response) {
+  async show(request: Request, response: Response) {
     const paramsSchema = z.object({
       id: z.string().uuid(),
     })
